@@ -15,35 +15,41 @@ Below you will find pre-trained pixel classification modules in ILASTIK for seve
 
 - [Download](https://downgit.github.io/#/home?url=https://github.com/fjhuizar/MAPPER/tree/main/ILASTIKPixelClassifier_1) ILASTIK module 1
   - **Source:** Nilay Kumar, Zartman Lab, Univeristy of Notre Dame
+  - One channel (Grayscale)
 ![](Classifier_1.png)
 
 
 - [Download](https://downgit.github.io/#/home?url=https://github.com/fjhuizar/MAPPER/tree/main/ILASTIKPixelClassifier_2) ILASTIK module 2
   - **Source:** Nilay Kumar, Zartman Lab, Univeristy of Notre Dame
+  - One channel (Grayscale)
 ![](Classifier_2.png)
 
 
 - [Download](https://downgit.github.io/#/home?url=https://github.com/fjhuizar/MAPPER/tree/main/ILASTIKPixelClassifier_3) ILASTIK module 3
   - **Source:** Nilay Kumar, Zartman Lab, Univeristy of Notre Dame
+  - Three channels (RGB)
 ![](Classifier_3.png)
 
 
 - [Download](https://downgit.github.io/#/home?url=https://github.com/fjhuizar/MAPPER/tree/main/ILASTIKPixelClassifier_4) ILASTIK module 4
   - **Source:** Nilay Kumar, Zartman Lab, Univeristy of Notre Dame
+  - One channel (Grayscale)
 ![](Classifier_4.png)
 
 
 - [Download](https://downgit.github.io/#/home?url=https://github.com/fjhuizar/MAPPER/tree/main/ILASTIKPixelClassifier_5) ILASTIK module 5
   - **Source:** Nilay Kumar, Zartman Lab, Univeristy of Notre Dame
+  - One channel (Grayscale)
 ![](Classifier_5.png)
 
 
 - [Download](https://downgit.github.io/#/home?url=https://github.com/fjhuizar/MAPPER/tree/main/ILASTIKPixelClassifier_6) ILASTIK module 6
   - **Source:** Nilay Kumar, Zartman Lab, Univeristy of Notre Dame
+  - Three channels (RGB)
 ![](Classifier_6.png)
 
 
 # Acknowledgements
 We would like to thank the South Bend Medical Foundation for generous access to their Apero Slide Scanner. We would like to thank [Dr. Ramezan Paravi Torghabeh](https://www.linkedin.com/in/ramezan-paravi-torghabeh-phd-b432baa0/), [Vijay Kumar Naidu Velagala](https://in.linkedin.com/in/vijay-kumar-naidu-velagala-34462429), [Dr. Megan Levis](https://scholar.google.com/citations?user=SY2-XTgAAAAJ&hl=en), and [Dr. Qinfeng Wu](https://www.linkedin.com/in/qinfengwu) for technical assistance and scientific discussions related to the project. The work in this manuscript was supported in part by NIH Grant R35GM124935, NSF award CBET-1553826, NSF-Simons Pilot award through Northwestern University, the Notre Dame International Mexico Faculty Grant Program, and grant CB-014-01-236685 from the Concejo Nacional de Ciencia y Tecnología of Mexico.
 
-# Repository last updated: November 10, 2021 12:00AM EST
+# Repository last updated: November 15, 2021 09:30PM EST
