@@ -1,0 +1,1598 @@
+---
+title: |
+  | MAPPER: An open-source, high-dimensional image analysis pipeline unmasks differential regulation of *Drosophila* wing features
+  |
+  | Supplementary File 2
+author: | 
+  | **Notebook Author:** Francisco Huizar
+  |
+  | **Manuscript Authorship:**
+  | Nilay Kumar$^{1,+}$, Francisco J. Huizar$^{1,+}$, Keity J. Farfan-Pira$^2$, Pavel Brodskiy$^1$, Dharsan Soundarrajan$^1$, Marcos Nahmad$^2$, Jeremiah J. Zartman$^{1,*}$
+  |
+  | $^1$Department of Chemical and BIomolecular Engineering, University of Notre Dame, Notre Dame, IN, 46556, USA
+  | $^2$ Department of Physiology, Biophysics, and Neurosciences, Center for Research and Advanced Studies of the National Polytechnical Institute (Cinvestav), Mexico City, Mexico 07360
+  |
+  | $^+$These authors contributed equally to this work.
+  |
+  | $^*$Correspondence: jzartman@nd.edu, (+1) 574-631-0455
+output:
+  html_document:
+    keep_md: yes
+    df_print: paged
+    toc: yes
+    toc_float: yes
+  html_notebook:
+    df_print: paged
+    toc: yes
+    toc_float: yes
+---
+
+# R setup and necessary packages for this code
+
+```{r setup, message=FALSE, warning=FALSE, error=FALSE}
+rm(list=ls()) # Clear workspace
+par(mfrow=c(1,1)) # Setup plot parameters
+par(ps = 12, font.lab = 1) # Plot parameters
+set.seed(1) # set random seed generator for reproducibility
+knitr::opts_chunk$set(dev = c("svg"),
+                      dpi = 600,
+                      cache = TRUE,
+                      comment = NA,
+                      message=FALSE,
+                      warning=FALSE,
+                      error=FALSE)
+library(tidyverse)
+library(MASS)
+library(reshape2)
+library(pracma)
+library(rcompanion)
+library(BBmisc)
+library(car)
+```
+
+## Function for 95% median CI
+
+Below is a function that calculates the exact confidence interval for a median from the [DescTools](https://cran.r-project.org/web/packages/DescTools/index.html) package for descriptive statistics. The confidence interval is a non-parametric interval for the median using order statistics to deal directly with error on the median. More information can be found [here](http://www.stat.umn.edu/geyer/old03/5102/notes/rank.pdf) and [here](https://hbiostat.org/doc/bbr.pdf). Code has been adapted from a StackExchange discussion [here](https://stats.stackexchange.com/questions/186957/is-there-a-reliable-nonparametric-confidence-interval-for-the-mean-of-a-skewed-d).
+
+```{r CI_Median}
+cimed <- function(x, alpha=0.05, na.rm=FALSE) {
+  if(na.rm) x <- x[! is.na(x)]
+  n <- length(x)
+  k <- qbinom(p=alpha / 2, size=n, prob=0.5, lower.tail=TRUE)
+  ## Actual CL: 1 - 2 * pbinom(k - 1, size=n, prob=0.5) >= 1 - alpha
+  sort(x)[c(k, n - k + 1)]
+}
+```
+
+## Function for 95% mean CI
+
+Below is a function that calculates the confidence interval for a mean.
+
+```{r CI_Mean}
+cimean <- function(x, alpha=0.05, na.rm=FALSE) {
+  if(na.rm) x <- x[! is.na(x)]
+  lowerBound = mean(x) - qnorm(1-alpha/2)*std_err(x)
+  upperBound = mean(x) + qnorm(1-alpha/2)*std_err(x)
+  return(c(lowerBound, upperBound))
+}
+```
+
+## Function to check if we can use the unpaired T-test
+Create a function "canUseUnpairedTTest" to first check if data sets indicate distributions are not significantly different from normal using Shapiro-Wilk's. [Explation](http://www.sthda.com/english/wiki/normality-test-in-r). Then check to see if data sets do not differ in their variances significantly. [Explanation](http://www.sthda.com/english/wiki/f-test-compare-two-variances-in-r). It will perform an unpaired T-test if all normality and variability criteria are met, else perform Mann-Whitney U Test. [Explanation](https://www.rdocumentation.org/packages/stats/versions/3.6.2/topics/wilcox.test)
+
+```{r direct_comparisons_function}
+canUseUnpairedTTest = function(df1, df2, alpha = 0.05){
+  p1 = shapiro.test(df1)$p
+  p2 = shapiro.test(df2)$p
+  p3 = var.test(df1, df2, alternative = "two.sided")$p.value
+  if (p1 > alpha & p2 > alpha & p3 > alpha) {
+    print("Unpaired T-test is viable")
+    t.test(df1, df2, var.equal = TRUE, conf.level = 1-alpha)
+  } else {
+    print("Unpaired T-test not viable")
+    print(wilcox.test(df1, df2,
+                      correct = FALSE,
+                      alternative = "two.sided", paired = FALSE, exact=TRUE, conf.level = 1-alpha))
+  }
+}
+```
+
+## Function to add linear fit to plot 
+
+The function below adds a simple linear regression fit line to a plot with the coefficients and $R^2$ value.
+
+```{r add_lm_eqn}
+lm_eqn <- function(x, y, df){
+    m <- lm(y ~ x, df);
+    eq <- substitute(italic(y) == a + b %.% italic(x)*","~~italic(r)^2~"="~r2, 
+         list(a = format(unname(coef(m)[1]), digits = 3),
+              b = format(unname(coef(m)[2]), digits = 3),
+             r2 = format(summary(m)$r.squared, digits = 4)))
+    as.character(as.expression(eq));
+}
+```
+
+# Load the wing measurement data
+
+Load in the data from the publicly available Samarkand species *Drosophila*. [Source](https://doi.org/10.1186/s13742-015-0065-6)
+
+```{r data_loading}
+trichomeValidation_df = read.csv("MAPPER_Trichome_Validation.csv", header=T, sep=",") %>% tibble()
+maleValidation_df = read.csv("MAPPER_Male_Validation.csv", header=T, sep=",") %>% tibble()
+femaleValidation_df = read.csv("MAPPER_Female_Validation.csv", header=T, sep=",") %>% tibble()
+```
+
+## Observe the data
+
+### Female trichome counts for automated and manual measurements
+
+```{r display_trichome}
+trichomeValidation_df
+```
+
+### Male landmark region axes lengths for automated and manual measurements
+
+```{r display_landmark_lengths}
+maleValidation_df
+```
+
+### Female intervein regions for automated and manual measurements
+
+```{r display_female_measurements}
+femaleValidation_df
+```
+
+# Trichome validation plots
+
+## Violin Plot
+
+Plotted is the distribution of the trichome counts of 50x50 pixel areas done manually and compared to MAPPER's automated output. Blue line indicates the median and the red lines correspond to the 95% CI of the median.
+
+```{r trichome_violin_plot}
+#svg("MAPPERValidationPlots/trichomeValidationViolin.svg", family = "arial", width=3, height=2)
+
+ggplot(melt(trichomeValidation_df),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  #stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.x=element_blank()) +
+  labs(x=expression(paste("")), y=expression(paste("50 x 50 pixel area trichome count"))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black")) +
+  ylim(c(33,52))
+```
+
+## Generalized linear model
+
+Because the dataset is discrete, we cannot fit a simple linear regression model and must use a generalized linear model.
+
+### Poisson regression model
+
+Because we deal with count data (*i.e.*, number of trichomes in a 50x50 pixel area), we will fit a Poisson GLM. Below is a sumary of the fit of trichome counts as a function of a categorical variable that specifies whether or not the data came from MAPPER's automated output or manual hand measurements.
+
+```{r trichome_poisson_fit}
+glmData = melt(trichomeValidation_df)
+trichomeGLM = glm(glmData$value ~ as.factor(glmData$variable), family=poisson())
+trichomeGLM %>% summary()
+```
+
+### 95% CIs of parameter estimates
+
+Let's take the parameter estimates and generate 95% confidence intervals for the parameter fits.
+
+```{r poisson_parameter_CI}
+cov.m1 <- vcov(trichomeGLM)
+std.err <- sqrt(diag(cov.m1))
+r.est <- cbind(Estimate= coef(trichomeGLM), "Standard Error" = std.err,
+"Pr(>|z|)" = 2 * pnorm(abs(coef(trichomeGLM)/std.err), lower.tail=FALSE),
+LL = coef(trichomeGLM) - 1.96 * std.err,
+UL = coef(trichomeGLM) + 1.96 * std.err)
+rownames(r.est) = c("b0", "b1")
+r.est
+```
+
+Save and store variables to generate a plot.
+
+```{r poisson_parameter_CI_vars}
+Estimate= coef(trichomeGLM)
+LL = coef(trichomeGLM) - 1.96 * std.err
+UL = coef(trichomeGLM) + 1.96 * std.err
+
+names(Estimate) = c("b0","b1")
+names(LL) = c("b0", "b1")
+names(UL) = c("b0", "b1")
+
+print(c("Lower bound:", exp(LL)))
+print(c("Estimate:", exp(Estimate)))
+print(c("Upper bound:", exp(UL)))
+```
+
+### Poisson Plot
+
+The second fit parameter (associated with whether a categorical variable $X_1$ is "manual" or "automated") has a 95% confidence interval of [0.974, 1.098]. Because this parameter confidence interval contains a value of 1, we can infer that there is not statistical difference in trichome counts whether it is done manually or automated. This is further noted by $p = 0.271$ on the GLM output from above for the fit parameter. Below I take the confidence intervals and generate predicted values for the Poisson GLM given our original dataset. I then plot the upper and lower confidence intervals of the Poisson GLM predictions. Because the confidence bands overlap, it helps us visualize no statistical difference between trichome counts done manually vs. automated.
+
+```{r poisson_parameters_plot_bounds}
+testX = as.factor(glmData$variable) %>% as.integer()-1
+yPred = (exp(Estimate[1])+exp(Estimate[2])*testX)
+yLL = (exp(LL[1])+exp(LL[2])*testX)
+yUL = (exp(UL[1])+exp(UL[2])*testX)
+```
+
+```{r poisson_plot_95_CI}
+#svg("MAPPERValidationPlots/trichomeValidationPoisson.svg", family = "arial", width=3, height=2)
+
+poissondf = tibble(predicted = yPred, lowerB = yLL, upperB = yUL, variable = as.factor(glmData$variable))
+ggplot(poissondf,
+       aes(x=variable,
+           y=predicted)) +
+  geom_errorbar(aes(ymin = yLL, ymax = yUL), fill="lightslateblue") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.x=element_blank()) +
+  labs(x=expression(paste("")), y=expression(paste("50 x 50 pixel area trichome count"))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black")) +
+  ylim(c(33,52))
+```
+
+# Male dataset validation plots
+
+Check if we should use the unpaired T-test of Mann-Whitney U-Test for statistical comparisons. For all male comparisons of MAPPER automated vs. manual measurements, there is no statistical differences. All violin plot distributions are comparable (with medians plotted as a blue line and 95% CIs plotted as red lines). Medians are used instead of means because the comparisons made do not pass the normality and variance assumptions for unpaired T-tests to be used.
+
+### Total wing areas (Mann-Whitney U)
+
+Male total wing areas MAPPER vs. manual are not statistically different.
+
+```{r male_area_test}
+canUseUnpairedTTest(maleValidation_df$Manual_Area, maleValidation_df$Auto_Area)
+```
+
+### PD Axis length (Mann-Whitney U)
+
+Male PD Axis measurements for MAPPER vs. manual are not statistically different.
+
+```{r male_PD_axis_test}
+canUseUnpairedTTest(maleValidation_df$Manual_PD, maleValidation_df$Auto_PD)
+```
+
+### AP Axis length (Mann-Whitney U)
+
+Male AP Axis measurements for MAPPER vs. manual are not statistically different.
+
+```{r male_AP_axis_test}
+canUseUnpairedTTest(maleValidation_df$Manual_AP, maleValidation_df$Auto_AP)
+```
+
+## Generate Actual Plots
+
+### Total Area
+
+Plotted is the distribution of the total wing areas done manually and compared to MAPPER's automated output. Blue line indicates the median with the red lines being the 95% CI of the median.
+
+```{r male_area_violin}
+#svg("MAPPERValidationPlots/maleTotalArea.svg", family = "arial", width=3, height=2)
+
+ggplot(melt(maleValidation_df) %>% dplyr::filter(variable=="Auto_Area" | variable =="Manual_Area"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  #stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.y=element_blank()) +
+  labs(x=expression(paste(""))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Plotted below is a simple linear fit for MAPPER vs. automated measurements. There is strong linear correlation between the two with nearly perfect fit.
+
+```{r male_area_linear_fit}
+#svg("MAPPERValidationPlots/maleTotalAreaLM.svg", family = "arial", width=3, height=2)
+
+lmx = maleValidation_df$Auto_Area
+lmy = maleValidation_df$Manual_Area
+model_lm = lm(lmy~lmx)
+
+ggplot(maleValidation_df,
+       aes(x=Auto_Area,
+           y=Manual_Area)) +
+  geom_point() +
+  geom_smooth(method=lm, color="red", fill="lightslateblue", se=TRUE) +
+  geom_text(x = 0.9, y = 1.1, label = lm_eqn(maleValidation_df$Auto_Area, maleValidation_df$Manual_Area, maleValidation_df), parse = TRUE) +
+  labs(x=expression(paste("MAPPER Area")), y=expression(paste("Manual Area"))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Below is the model summary for the linear fit.
+
+```{r male_area_fit_summary}
+lm(maleValidation_df$Manual_Area ~ maleValidation_df$Auto_Area) %>% summary()
+```
+
+Below are the slope parameter bounds.
+
+```{r male_area_fit_bounds}
+parameter_value = model_lm$coefficients[2]
+model_sum = model_lm %>% summary()
+parameter_SE = model_sum$coefficients[ , 2][2]
+LB_param = parameter_value - qnorm(0.975)*parameter_SE
+UB_param = parameter_value + qnorm(0.975)*parameter_SE
+cbind(LB_param, UB_param)
+```
+
+Below is the significance test of the slope parameter for the null hypothesis $H_0 = 1.0$.
+
+```{r male_area_slope_test}
+2*pt((-abs((parameter_value-1.0)/parameter_SE)),model_lm$df.residual)
+```
+
+### PD axis length
+
+Plotted is the distribution of the PD axis length (scaled to the mean PD axis length of the group) done manually and compared to MAPPER's automated output. Blue line indicates the median with the red lines being the 95% CI of the median.
+
+```{r male_PD_length_violin}
+#svg("MAPPERValidationPlots/malePDAxisViolin.svg", family = "arial", width=3, height=2)
+
+ggplot(melt(maleValidation_df) %>% dplyr::filter(variable=="Auto_PD" | variable =="Manual_PD"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  #stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.y=element_blank()) +
+  labs(x=expression(paste(""))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Plotted below is a simple linear fit for MAPPER vs. automated measurements. There is some linear correlation between the two.
+
+```{r male_PD_LM}
+#svg("MAPPERValidationPlots/malePDAxisLM.svg", family = "arial", width=3, height=2)
+
+lmx = maleValidation_df$Auto_PD
+lmy = maleValidation_df$Manual_PD
+model_lm = lm(lmy~lmx)
+
+ggplot(maleValidation_df,
+       aes(x=Auto_PD,
+           y=Manual_PD)) +
+  geom_point() +
+  geom_smooth(method=lm, color="red", fill="lightslateblue", se=TRUE) +
+  geom_text(x = 0.96, y = 1.05, label = lm_eqn(maleValidation_df$Auto_PD, maleValidation_df$Manual_PD, maleValidation_df), parse = TRUE) +
+  labs(x=expression(paste("MAPPER PD Length")), y=expression(paste("Manual PD Length"))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Below is the model summary for the linear fit.
+
+```{r male_PD_lm_summary}
+lm(maleValidation_df$Manual_PD ~ maleValidation_df$Auto_PD) %>% summary()
+```
+
+Below are the slope parameter bounds.
+
+```{r male_PD_slope_bounds}
+parameter_value = model_lm$coefficients[2]
+model_sum = model_lm %>% summary()
+parameter_SE = model_sum$coefficients[ , 2][2]
+LB_param = parameter_value - qnorm(0.975)*parameter_SE
+UB_param = parameter_value + qnorm(0.975)*parameter_SE
+cbind(LB_param, UB_param)
+```
+
+Below is the significance test of the slope parameter for the null hypothesis $H_0 = 1.0$.
+
+```{r male_PD_slope_test}
+2*pt((-abs((parameter_value-1.0)/parameter_SE)),model_lm$df.residual)
+```
+
+### AP axis length
+
+Plotted is the distribution of the AP axis length done manually and compared to MAPPER's automated output. Blue line indicates the median with the red lines being the 95% CI of the median. 
+
+```{r male_AP_length_violin}
+#svg("MAPPERValidationPlots/maleAPAxisViolin.svg", family = "arial", width=3, height=2)
+
+ggplot(melt(maleValidation_df) %>% dplyr::filter(variable=="Auto_AP" | variable =="Manual_AP"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  #stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.y=element_blank()) +
+  labs(x=expression(paste(""))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Plotted below is a simple linear fit for MAPPER vs. automated measurements. There is some linear correlation between the two.
+
+```{r male_AP_length_fit}
+#svg("MAPPERValidationPlots/maleAPAxisLM.svg", family = "arial", width=3, height=2)
+
+lmx = maleValidation_df$Auto_AP
+lmy = maleValidation_df$Manual_AP
+model_lm = lm(lmy~lmx)
+
+ggplot(maleValidation_df,
+       aes(x=Auto_AP,
+           y=Manual_AP)) +
+  geom_point() +
+  geom_smooth(method=lm, color="red", fill="lightslateblue", se=TRUE) +
+  geom_text(x = 0.96, y = 1.05, label = lm_eqn(maleValidation_df$Auto_AP, maleValidation_df$Manual_AP, maleValidation_df), parse = TRUE) +
+  labs(x=expression(paste("MAPPER AP Length")), y=expression(paste("Manual AP Length"))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black")) 
+```
+
+Below is the model summary for the linear fit.
+
+```{r male_AP_length_lm_summary}
+lm(maleValidation_df$Manual_AP ~ maleValidation_df$Auto_AP) %>% summary()
+```
+
+Below are the bounds for the slope parameter.
+
+```{r male_AP_slope_bounds}
+parameter_value = model_lm$coefficients[2]
+model_sum = model_lm %>% summary()
+parameter_SE = model_sum$coefficients[ , 2][2]
+LB_param = parameter_value - qnorm(0.975)*parameter_SE
+UB_param = parameter_value + qnorm(0.975)*parameter_SE
+cbind(LB_param, UB_param)
+```
+
+Below is the significance test of the slope parameter for the null hypothesis $H_0 = 1.0$.
+
+```{r male_AP_slope_test}
+2*pt((-abs((parameter_value-1.0)/parameter_SE)),model_lm$df.residual)
+```
+
+## Combined violin plots
+
+```{r MAPPER_landmark_region_length_violins} 
+#svg("MAPPERValidationPlots/LengthAxisViolin.svg", family = "arial", width=3, height=2)
+
+ggplot(melt(maleValidation_df) %>% dplyr::filter(variable=="Auto_PD" | variable =="Manual_PD" | variable =="Auto_AP" | variable =="Manual_AP"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  #stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.y=element_blank()) +
+  labs(x=expression(paste(""))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+# Female dataset validation plots
+
+## Check validity of unpaired T-test
+
+Similar to before, check if we should use the unpaired T-test of Mann-Whitney U-Test for statistical comparisons. For all female comparisons of MAPPER automated vs. manual measurements, there is no statistical differences. All violin plot distributions are comparable (with means plotted as a blue line and 95% CIs plotted as red lines). Means are used instead of medians (seen previously in the male plots) because the comparisons made all pass the normality and variance assumptions for unpaired T-tests to be used. Categories plotted with the letter "m" prefix indicate "manual" measurements, and categories plotted with the letter "a" prefix indicate automated measurements. All simple linear fits have strong linear correlation. This indicates for the female data set, MAPPER performed consistently well.
+
+### IVA1 (T-test)
+
+```{r female_IVA1_test}
+canUseUnpairedTTest(femaleValidation_df$mI1, femaleValidation_df$aI1)
+```
+
+### IVA2 (T-test)
+
+```{r female_IVA2_test}
+canUseUnpairedTTest(femaleValidation_df$mI2, femaleValidation_df$aI2)
+```
+
+### IVA3 (T-test)
+
+```{r female_IVA3_test}
+canUseUnpairedTTest(femaleValidation_df$mI3, femaleValidation_df$aI3)
+```
+
+### IVA4 (T-test)
+
+```{r female_IVA4_test}
+canUseUnpairedTTest(femaleValidation_df$mI4, femaleValidation_df$aI4)
+```
+
+### IVA5 (T-test)
+
+```{r female_IVA5_test}
+canUseUnpairedTTest(femaleValidation_df$mI5, femaleValidation_df$aI5)
+```
+
+### IVA6 (T-test)
+
+```{r female_IVA6_test}
+canUseUnpairedTTest(femaleValidation_df$mI6, femaleValidation_df$aI6)
+```
+
+### IVA7 (T-test)
+
+```{r female_IVA7_test}
+canUseUnpairedTTest(femaleValidation_df$mI7, femaleValidation_df$aI7)
+```
+
+### Total Area (T-test)
+
+```{r female_total_area_test}
+canUseUnpairedTTest(femaleValidation_df$mTA, femaleValidation_df$aTA)
+```
+
+## Generate Actual Plots
+
+### IVA1
+
+Plotted is the distribution of the intervein region 1 area done manually and compared to MAPPER's automated output. Blue line indicates the mean with the red lines being the 95% CI of the mean.
+
+```{r female_IVA1_violin}
+#svg("MAPPERValidationPlots/femaleIVA1Violin.svg", family = "arial", width=3, height=2)
+
+ggplot(melt(femaleValidation_df) %>% dplyr::filter(variable=="aI1" | variable == "mI1"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  #stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.y=element_blank()) +
+  labs(x=expression(paste(""))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Plotted below is a simple linear fit for MAPPER vs. automated measurements.
+
+```{r female_IVA1_lm_plot}
+lmx = femaleValidation_df$aI1
+lmy = femaleValidation_df$mI1
+
+#svg("MAPPERValidationPlots/femaleIVA1LM.svg", family = "arial", width=3, height=2)
+
+ggplot(femaleValidation_df,
+       aes(x=aI1,
+           y=mI1)) +
+  geom_point() +
+  geom_smooth(method=lm, color="red", fill="lightslateblue", se=TRUE) +
+  geom_text(x = min(lmx)*1.10, y = max(lmy)*0.95, label = lm_eqn(lmx, lmy, femaleValidation_df), parse = TRUE) +
+  labs(x=expression(paste("MAPPER Area")), y=expression(paste("Manual Area"))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Below is the model summary for the linear fit.
+
+```{r female_IVA1_lm_summary}
+model_lm = lm(lmy ~ lmx)
+model_lm %>% summary()
+```
+
+Below are the slope parameter bounds.
+
+```{r female_IVA1_slope_bounds}
+parameter_value = model_lm$coefficients[2]
+model_sum = model_lm %>% summary()
+parameter_SE = model_sum$coefficients[ , 2][2]
+LB_param = parameter_value - qnorm(0.975)*parameter_SE
+UB_param = parameter_value + qnorm(0.975)*parameter_SE
+cbind(LB_param, UB_param)
+```
+
+Below is the significance test of the slope parameter for the null hypothesis $H_0 = 1.0$.
+
+```{r female_IVA1_slope_test}
+2*pt((-abs((parameter_value-1.0)/parameter_SE)),model_lm$df.residual)
+```
+
+### IVA2
+
+Plotted is the distribution of the intervein region 2 area done manually and compared to MAPPER's automated output. Blue line indicates the mean with the red lines being the 95% CI of the mean.
+
+```{r female_IVA2_violin}
+#svg("MAPPERValidationPlots/femaleIVA2Violin.svg", family = "arial", width=3, height=2)
+
+ggplot(melt(femaleValidation_df) %>% dplyr::filter(variable=="aI2" | variable == "mI2"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  #stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.y=element_blank()) +
+  labs(x=expression(paste(""))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Plotted below is a simple linear fit for MAPPER vs. automated measurements.
+
+```{r female_IVA2_lm_plot}
+lmx = femaleValidation_df$aI2
+lmy = femaleValidation_df$mI2
+
+#svg("MAPPERValidationPlots/femaleIVA2LM.svg", family = "arial", width=3, height=2)
+
+ggplot(femaleValidation_df,
+       aes(x=aI2,
+           y=mI2)) +
+  geom_point() +
+  geom_smooth(method=lm, color="red", fill="lightslateblue", se=TRUE) +
+  geom_text(x = min(lmx)*1.10, y = max(lmy)*0.95, label = lm_eqn(lmx, lmy, femaleValidation_df), parse = TRUE) +
+  labs(x=expression(paste("MAPPER Area")), y=expression(paste("Manual Area"))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Below is the model summary for the linear fit.
+
+```{r female_IVA2_lm_summary}
+model_lm = lm(lmy ~ lmx)
+model_lm %>% summary()
+```
+
+Below are the slope parameter bounds.
+
+```{r female_IVA2_slope_bounds}
+parameter_value = model_lm$coefficients[2]
+model_sum = model_lm %>% summary()
+parameter_SE = model_sum$coefficients[ , 2][2]
+LB_param = parameter_value - qnorm(0.975)*parameter_SE
+UB_param = parameter_value + qnorm(0.975)*parameter_SE
+cbind(LB_param, UB_param)
+```
+
+Below is the significance test of the slope parameter for the null hypothesis $H_0 = 1.0$.
+
+```{r female_IVA2_slope_test}
+2*pt((-abs((parameter_value-1.0)/parameter_SE)),model_lm$df.residual)
+```
+
+### IVA3
+
+Plotted is the distribution of the intervein region 3 area done manually and compared to MAPPER's automated output. Blue line indicates the mean with the red lines being the 95% CI of the mean.
+
+```{r female_IVA3_violin}
+#svg("MAPPERValidationPlots/femaleIVA3Violin.svg", family = "arial", width=3, height=2)
+
+ggplot(melt(femaleValidation_df) %>% dplyr::filter(variable=="aI3" | variable == "mI3"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  #stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.y=element_blank()) +
+  labs(x=expression(paste(""))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Plotted below is a simple linear fit for MAPPER vs. automated measurements.
+
+```{r female_IVA3_lm_plot}
+lmx = femaleValidation_df$aI3
+lmy = femaleValidation_df$mI3
+
+#svg("MAPPERValidationPlots/femaleIVA3LM.svg", family = "arial", width=3, height=2)
+
+ggplot(femaleValidation_df,
+       aes(x=aI3,
+           y=mI3)) +
+  geom_point() +
+  geom_smooth(method=lm, color="red", fill="lightslateblue", se=TRUE) +
+  geom_text(x = min(lmx)*1.10, y = max(lmy)*0.95, label = lm_eqn(lmx, lmy, femaleValidation_df), parse = TRUE) +
+  labs(x=expression(paste("MAPPER Area")), y=expression(paste("Manual Area"))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Below is the model summary for the linear fit.
+
+```{r female_IVA3_lm_summary}
+model_lm = lm(lmy ~ lmx)
+model_lm %>% summary()
+```
+
+Below are the slope parameter bounds.
+
+```{r female_IVA3_slope_bounds}
+parameter_value = model_lm$coefficients[2]
+model_sum = model_lm %>% summary()
+parameter_SE = model_sum$coefficients[ , 2][2]
+LB_param = parameter_value - qnorm(0.975)*parameter_SE
+UB_param = parameter_value + qnorm(0.975)*parameter_SE
+cbind(LB_param, UB_param)
+```
+
+Below is the significance test of the slope parameter for the null hypothesis $H_0 = 1.0$.
+
+```{r female_IVA3_slope_test}
+2*pt((-abs((parameter_value-1.0)/parameter_SE)),model_lm$df.residual)
+```
+
+### IVA4
+
+Plotted is the distribution of the intervein region 4 area done manually and compared to MAPPER's automated output. Blue line indicates the mean with the red lines being the 95% CI of the mean.
+
+```{r female_IVA4_violin}
+#svg("MAPPERValidationPlots/femaleIVA4Violin.svg", family = "arial", width=3, height=2)
+
+ggplot(melt(femaleValidation_df) %>% dplyr::filter(variable=="aI4" | variable == "mI4"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  #stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.y=element_blank()) +
+  labs(x=expression(paste(""))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Plotted below is a simple linear fit for MAPPER vs. automated measurements.
+
+```{r female_IVA4_lm_plot}
+lmx = femaleValidation_df$aI4
+lmy = femaleValidation_df$mI4
+
+#svg("MAPPERValidationPlots/femaleIVA4LM.svg", family = "arial", width=3, height=2)
+
+ggplot(femaleValidation_df,
+       aes(x=aI4,
+           y=mI4)) +
+  geom_point() +
+  geom_smooth(method=lm, color="red", fill="lightslateblue", se=TRUE) +
+  geom_text(x = min(lmx)*1.10, y = max(lmy)*0.95, label = lm_eqn(lmx, lmy, femaleValidation_df), parse = TRUE) +
+  labs(x=expression(paste("MAPPER Area")), y=expression(paste("Manual Area"))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Below is the model summary for the linear fit.
+
+```{r female_IVA4_lm_summary}
+model_lm = lm(lmy ~ lmx)
+model_lm %>% summary()
+```
+
+Below are the slope parameter bounds.
+
+```{r female_IVA4_slope_bounds}
+parameter_value = model_lm$coefficients[2]
+model_sum = model_lm %>% summary()
+parameter_SE = model_sum$coefficients[ , 2][2]
+LB_param = parameter_value - qnorm(0.975)*parameter_SE
+UB_param = parameter_value + qnorm(0.975)*parameter_SE
+cbind(LB_param, UB_param)
+```
+
+Below is the significance test of the slope parameter for the null hypothesis $H_0 = 1.0$.
+
+```{r female_IVA4_slope_test}
+2*pt((-abs((parameter_value-1.0)/parameter_SE)),model_lm$df.residual)
+```
+
+### IVA5
+
+Plotted is the distribution of the intervein region 5 area done manually and compared to MAPPER's automated output. Blue line indicates the mean with the red lines being the 95% CI of the mean.
+
+```{r female_IVA5_violin}
+#svg("MAPPERValidationPlots/femaleIVA5Violin.svg", family = "arial", width=3, height=2)
+
+ggplot(melt(femaleValidation_df) %>% dplyr::filter(variable=="aI5" | variable == "mI5"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  #stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.y=element_blank()) +
+  labs(x=expression(paste(""))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Plotted below is a simple linear fit for MAPPER vs. automated measurements.
+
+```{r female_IVA5_lm_plot}
+lmx = femaleValidation_df$aI5
+lmy = femaleValidation_df$mI5
+
+#svg("MAPPERValidationPlots/femaleIVA5LM.svg", family = "arial", width=3, height=2)
+
+ggplot(femaleValidation_df,
+       aes(x=aI5,
+           y=mI5)) +
+  geom_point() +
+  geom_smooth(method=lm, color="red", fill="lightslateblue", se=TRUE) +
+  geom_text(x = min(lmx)*1.10, y = max(lmy)*0.95, label = lm_eqn(lmx, lmy, femaleValidation_df), parse = TRUE) +
+  labs(x=expression(paste("MAPPER Area")), y=expression(paste("Manual Area"))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Below is the model summary for the linear fit.
+
+```{r female_IVA5_lm_summary}
+model_lm = lm(lmy ~ lmx)
+model_lm %>% summary()
+```
+
+Below are the slope parameter bounds.
+
+```{r female_IVA5_slope_bounds}
+parameter_value = model_lm$coefficients[2]
+model_sum = model_lm %>% summary()
+parameter_SE = model_sum$coefficients[ , 2][2]
+LB_param = parameter_value - qnorm(0.975)*parameter_SE
+UB_param = parameter_value + qnorm(0.975)*parameter_SE
+cbind(LB_param, UB_param)
+```
+
+Below is the significance test of the slope parameter for the null hypothesis $H_0 = 1.0$.
+
+```{r female_IVA5_slope_test}
+2*pt((-abs((parameter_value-1.0)/parameter_SE)),model_lm$df.residual)
+```
+
+### IVA6
+
+Plotted is the distribution of the intervein region 1 area done manually and compared to MAPPER's automated output. Blue line indicates the mean with the red lines being the 95% CI of the mean.
+
+```{r female_IVA6_violin}
+#svg("MAPPERValidationPlots/femaleIVA6Violin.svg", family = "arial", width=3, height=2)
+
+ggplot(melt(femaleValidation_df) %>% dplyr::filter(variable=="aI6" | variable == "mI6"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  #stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.y=element_blank()) +
+  labs(x=expression(paste(""))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Plotted below is a simple linear fit for MAPPER vs. automated measurements.
+
+```{r female_IVA6_lm_plot}
+lmx = femaleValidation_df$aI6
+lmy = femaleValidation_df$mI6
+
+#svg("MAPPERValidationPlots/femaleIVA6LM.svg", family = "arial", width=3, height=2)
+
+ggplot(femaleValidation_df,
+       aes(x=aI6,
+           y=mI6)) +
+  geom_point() +
+  geom_smooth(method=lm, color="red", fill="lightslateblue", se=TRUE) +
+  geom_text(x = min(lmx)*1.10, y = max(lmy)*0.95, label = lm_eqn(lmx, lmy, femaleValidation_df), parse = TRUE) +
+  labs(x=expression(paste("MAPPER Area")), y=expression(paste("Manual Area"))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Below is the model summary for the linear fit.
+
+```{r female_IVA6_lm_summary}
+model_lm = lm(lmy ~ lmx)
+model_lm %>% summary()
+```
+
+Below are the slope parameter bounds.
+
+```{r female_IVA6_slope_bounds}
+parameter_value = model_lm$coefficients[2]
+model_sum = model_lm %>% summary()
+parameter_SE = model_sum$coefficients[ , 2][2]
+LB_param = parameter_value - qnorm(0.975)*parameter_SE
+UB_param = parameter_value + qnorm(0.975)*parameter_SE
+cbind(LB_param, UB_param)
+```
+
+Below is the significance test of the slope parameter for the null hypothesis $H_0 = 1.0$.
+
+```{r female_IVA6_slope_test}
+2*pt((-abs((parameter_value-1.0)/parameter_SE)),model_lm$df.residual)
+```
+
+### IVA7
+
+Plotted is the distribution of the intervein region 1 area done manually and compared to MAPPER's automated output. Blue line indicates the mean with the red lines being the 95% CI of the mean.
+
+```{r female_IVA7_violin}
+#svg("MAPPERValidationPlots/femaleIVA7Violin.svg", family = "arial", width=3, height=2)
+
+ggplot(melt(femaleValidation_df) %>% dplyr::filter(variable=="aI7" | variable == "mI7"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  #stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.y=element_blank()) +
+  labs(x=expression(paste(""))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Plotted below is a simple linear fit for MAPPER vs. automated measurements.
+
+```{r female_IVA7_lm_plot}
+lmx = femaleValidation_df$aI7
+lmy = femaleValidation_df$mI7
+
+#svg("MAPPERValidationPlots/femaleIVA7LM.svg", family = "arial", width=3, height=2)
+
+ggplot(femaleValidation_df,
+       aes(x=aI7,
+           y=mI7)) +
+  geom_point() +
+  geom_smooth(method=lm, color="red", fill="lightslateblue", se=TRUE) +
+  geom_text(x = min(lmx)*1.10, y = max(lmy)*0.95, label = lm_eqn(lmx, lmy, femaleValidation_df), parse = TRUE) +
+  labs(x=expression(paste("MAPPER Area")), y=expression(paste("Manual Area"))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Below is the model summary for the linear fit.
+
+```{r female_IVA7_lm_summary}
+model_lm = lm(lmy ~ lmx)
+model_lm %>% summary()
+```
+
+Below are the slope parameter bounds.
+
+```{r female_IVA7_slope_bounds}
+parameter_value = model_lm$coefficients[2]
+model_sum = model_lm %>% summary()
+parameter_SE = model_sum$coefficients[ , 2][2]
+LB_param = parameter_value - qnorm(0.975)*parameter_SE
+UB_param = parameter_value + qnorm(0.975)*parameter_SE
+cbind(LB_param, UB_param)
+```
+
+Below is the significance test of the slope parameter for the null hypothesis $H_0 = 1.0$.
+
+```{r female_IVA7_slope_test}
+2*pt((-abs((parameter_value-1.0)/parameter_SE)),model_lm$df.residual)
+```
+
+### Total Area
+
+Plotted is the distribution of the total wing area done manually and compared to MAPPER's automated output. Blue line indicates the mean with the red lines being the 95% CI of the mean.
+
+```{r female_TA_violin}
+#svg("MAPPERValidationPlots/femaleIVATotViolin.svg", family = "arial", width=3, height=2)
+
+ggplot(melt(femaleValidation_df) %>% dplyr::filter(variable=="aTA" | variable == "mTA"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  #stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.y=element_blank()) +
+  labs(x=expression(paste(""))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Plotted below is a simple linear fit for MAPPER vs. automated measurements.
+
+```{r female_TA_lm_plot}
+lmx = femaleValidation_df$aTA
+lmy = femaleValidation_df$mTA
+
+#svg("MAPPERValidationPlots/femaleIVATotLM.svg", family = "arial", width=3, height=2)
+
+ggplot(femaleValidation_df,
+       aes(x=aTA,
+           y=mTA)) +
+  geom_point() +
+  geom_smooth(method=lm, color="red", fill="lightslateblue", se=TRUE) +
+  geom_text(x = min(lmx)*1.10, y = max(lmy)*0.95, label = lm_eqn(lmx, lmy, femaleValidation_df), parse = TRUE) +
+  labs(x=expression(paste("MAPPER Area")), y=expression(paste("Manual Area"))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Below is the model summary for the linear fit.
+
+```{r female_TA_lm_summary}
+model_lm = lm(lmy ~ lmx)
+model_lm %>% summary()
+```
+
+Below are the slope parameter bounds.
+
+```{r female_TA_slope_bounds}
+parameter_value = model_lm$coefficients[2]
+model_sum = model_lm %>% summary()
+parameter_SE = model_sum$coefficients[ , 2][2]
+LB_param = parameter_value - qnorm(0.975)*parameter_SE
+UB_param = parameter_value + qnorm(0.975)*parameter_SE
+cbind(LB_param, UB_param)
+```
+
+Below is the significance test of the slope parameter for the null hypothesis $H_0 = 1.0$.
+
+```{r female_TA_slope_test}
+2*pt((-abs((parameter_value-1.0)/parameter_SE)),model_lm$df.residual)
+```
+
+# Multiple independent runs of MAPPER
+
+## Load repeated trials
+
+```{r load_repeated_runs}
+samarkand_1 = read.csv("Samarkand_1.csv", header=T, sep=",") %>% tibble()
+samarkand_2 = read.csv("Samarkand_2.csv", header=T, sep=",") %>% tibble()
+samarkand_3 = read.csv("Samarkand_3.csv", header=T, sep=",") %>% tibble()
+```
+
+## View the dataframes
+
+```{r view_run_1}
+samarkand_1
+```
+
+```{r view_run_2}
+samarkand_2$Genotype = 2
+samarkand_2
+```
+
+```{r view_run_3}
+samarkand_3$Genotype = 3
+samarkand_3
+```
+
+## Join the dataframes to create a single dataframe with all samples
+
+```{r first_join}
+join_1 = inner_join(samarkand_1, samarkand_2, by="Wing.name", suffix=c(".run1", ".run2"))
+join_1
+```
+
+```{r second_join}
+join_2 = inner_join(join_1, samarkand_3, by="Wing.name")
+join_2
+```
+
+## Total Wing Area across all independent MAPPER runs and manual measurements
+
+### Statistical comparisons
+
+```{r create_comparison_df}
+first_group = melt(join_2) %>% dplyr::filter(variable=="Total.wing.area.run1") %>% mutate(variable=1)
+second_group = melt(join_2) %>% dplyr::filter(variable=="Total.wing.area.run2") %>% mutate(variable=2)
+third_group = melt(join_2) %>% dplyr::filter(variable=="Total.wing.area") %>% mutate(variable=3)
+
+
+comparison_df = bind_rows(first_group, second_group, third_group)
+comparison_df
+```
+
+#### Check normality assumptions
+
+Data is not normal, by Shapiro-Wilk's test, thus we must proceed with Levene's test.
+
+```{r check_normality_run_1}
+testSelection = comparison_df %>% dplyr::filter(variable==1)
+shapiro.test(testSelection$value)
+```
+
+```{r check_normality_run_2}
+testSelection = comparison_df %>% dplyr::filter(variable==2)
+shapiro.test(testSelection$value)
+```
+
+```{r check_normality_run_3}
+testSelection = comparison_df %>% dplyr::filter(variable==3)
+shapiro.test(testSelection$value)
+```
+
+### Levene's test for equal variance of non-parametric distribution
+
+Because the data is not normally distributed, we must use Levene's test for evaluating homogeneity of variances. More information can be found [Here](https://www.itl.nist.gov/div898/handbook/eda/section3/eda35a.htm) and [Here](http://www.sthda.com/english/wiki/compare-multiple-sample-variances-in-r). There is no statistical difference in variances of the independent MAPPER runs.
+
+```{r perform_Levene_MAPPER}
+leveneTest(value~factor(variable), data=comparison_df)
+```
+
+### Kruskal-Wallis test for non-parametric ANOVA
+
+Because the data is not normally distributed, we must use the Kruskal-Wallis test for evaluating equalty of the means. More information can be found [Here](http://www.sthda.com/english/wiki/kruskal-wallis-test-in-r). There is no statistical difference in means of the independent MAPPER runs.
+
+```{r perform_KW_MAPPER}
+kruskal.test(value~factor(variable), data=comparison_df)
+```
+
+## Compare to manual
+
+Create a dataframe that joins manual measurements to the independent MAPPER measurements.
+
+```{r third_join}
+femaleValidation_df_2 = femaleValidation_df %>% dplyr::rename(Wing.name=Filename)
+join_3 = inner_join(join_2, femaleValidation_df_2, by="Wing.name")
+join_3
+```
+
+Create a second comparison dataframe.
+
+```{r comparison_2_creation}
+first_group = melt(join_3) %>% dplyr::filter(variable=="Total.wing.area.run1") %>% mutate(variable=1)
+second_group = melt(join_3) %>% dplyr::filter(variable=="Total.wing.area.run2") %>% mutate(variable=2)
+third_group = melt(join_3) %>% dplyr::filter(variable=="Total.wing.area") %>% mutate(variable=3)
+fourth_group = melt(join_3) %>% dplyr::filter(variable=="mTA") %>% mutate(variable=4)
+
+
+comparison_df_2 = bind_rows(first_group, second_group, third_group, fourth_group)
+comparison_df_2
+```
+
+#### Check normality assumptions for the complete combined data
+
+Each dataset does not differ significantly from a normal distribution via Shaprio-Wilk's test ($p < 0.05$). Therefore, we can proceed with Bartlett's test and a one-way ANOVA test.
+
+**NOTE:** The data for the indpendent MAPPER runs had sample sizes of 61 wings each. The manual measurements to compare to only had a sample size of 49 wings. The second comparison dataframe has a sample size of 49 wings for each independent MAPPER run and manual measurement to be able to match MAPPER's predicted output to manual measurements for root-mean-square error calculations.
+
+```{r check_normality_combined_run_1}
+testSelection = comparison_df_2 %>% dplyr::filter(variable==1)
+shapiro.test(testSelection$value)
+```
+
+```{r check_normality_combined_run_2}
+testSelection = comparison_df_2 %>% dplyr::filter(variable==2)
+shapiro.test(testSelection$value)
+```
+
+```{r check_normality_combined_run_3}
+testSelection = comparison_df_2 %>% dplyr::filter(variable==3)
+shapiro.test(testSelection$value)
+```
+
+```{r check_normality_combined_run_4}
+testSelection = comparison_df_2 %>% dplyr::filter(variable==4)
+shapiro.test(testSelection$value)
+```
+
+### Bartlett's test
+
+In order to assess homogeneity of variances, we will perform Bartlett's test. More information can be found [Here](http://www.sthda.com/english/wiki/compare-multiple-sample-variances-in-r). There is no statistical differences in variances of the independent MAPPER runs and manual measurements.
+
+```{r perform_Bartlett_test}
+bartlett.test(value~factor(variable), data=comparison_df_2)
+```
+
+### ANOVA
+
+In order to assess equlity of means, we will perform a one-way ANOVA test. More information can be found [Here](http://www.sthda.com/english/wiki/one-way-anova-test-in-r). There is no statistical differences in the means of the independent MAPPER runs and manual measurements.
+
+```{r perform_ANOVA}
+aov(value~factor(variable), data=comparison_df_2) %>% summary()
+```
+
+## Violin plot of MAPPER and manual independent runs
+
+Plotted is the distribution of total wing area done manually and compared to MAPPER's automated output for all independent runs of MAPPER. Blue line indicates the mean with the red lines being the 95% CI of the mean.
+
+```{r RMSE_violin_plot}
+#svg("MAPPERValidationPlots/RMSEviolin.svg", family = "arial", width=3, height=2)
+ggplot(melt(join_3) %>% dplyr::filter(variable=="Total.wing.area.run1" | variable == "Total.wing.area.run2" | variable == "Total.wing.area" | variable =="mTA"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  #stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.x=element_blank()) +
+  labs(x=expression(paste("")), y=expression(paste("Total Wing Area"))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+## Root-mean-square error (RMSE) evaluations 
+
+Extract the values from each independent run to compare to manual measurements.
+
+```{r obtain_comparison_values}
+manual_vals = fourth_group$value
+run_one_vals = first_group$value
+run_two_vals = second_group$value
+run_three_vals = third_group$value
+```
+
+### Run one prediction metrics
+
+```{r run_1_RMSE}
+rmserr(manual_vals, run_one_vals, summary=TRUE)
+```
+
+### Run two prediction metrics
+
+```{r run_2_RMSE}
+rmserr(manual_vals, run_two_vals, summary=TRUE)
+```
+
+### Run three prediction metrics
+
+```{r run_3_RMSE}
+rmserr(manual_vals, run_three_vals, summary=TRUE)
+```
+
+### Normalized root-mean-square error (NRMSE)
+
+To better assess how well the independent runs performed compared to manual measurements, the RMSE value of each independent MAPPER run was normalized to the mean value ($\bar{y}$) of the manual measurements to obtain:
+
+$$\text{NRMSE} = \frac{\text{RMSE}}{\bar{y}} \quad \quad \text{RMSE} = \sqrt{\frac{\sum_{i=1}^N (x_i-\hat{x}_i)^2}{N}}$$
+
+This is similar to the form of the coefficient of variation (CV) of a dataset, wherein the CV is the standard deviation scaled to the mean of the dataset:
+
+$$\text{CV}=\frac{\sigma}{\mu} \quad \quad \sigma = \sqrt{\frac{\sum_{i=1}^N (x_i-\bar{x}_i)^2}{N}}$$
+Because RMSE is an estimator for the standard deviation of the distribution of the MAPPER predicted residuals, benchmarking MAPPER NRMSEs to the manual measurement CV will provide insight into how well MAPPER performed in measuring the wing areas.
+
+#### Run one NRMSE
+
+```{r run_1_NRMSE}
+(100 * sqrt(sum((run_one_vals-manual_vals)^2)/length(manual_vals)) / mean(manual_vals)) %>% round(2)
+```
+
+#### Run two NRMSE
+
+```{r run_2_NRMSE}
+(100 * sqrt(sum((run_two_vals-manual_vals)^2)/length(manual_vals)) / mean(manual_vals)) %>% round(2)
+```
+
+#### Run three NRMSE
+
+```{r run_3_NRMSE}
+(100 * sqrt(sum((run_three_vals-manual_vals)^2)/length(manual_vals)) / mean(manual_vals)) %>% round(2)
+```
+
+#### Coefficient of varation
+
+```{r manual_CV}
+100* std(manual_vals) / mean(manual_vals)
+```
+
+## Mean absolute percentage error (MAPE)
+
+Another metric to evaulate how well MAPPER performed is the mean absolute percentage error. This metric measures the size of the prediction error in percentage form. 
+
+### Run one MAPE
+
+```{r run_1_MAPE}
+(100 * sum(abs((run_one_vals-manual_vals)/manual_vals))/length(manual_vals)) %>% round(2)
+```
+
+### Run two MAPE
+
+```{r run_2_MAPE}
+(100 * sum(abs((run_two_vals-manual_vals)/manual_vals))/length(manual_vals)) %>% round(2)
+```
+
+### Run three MAPE
+
+```{r run_3_MAPE}
+(100 * sum(abs((run_three_vals-manual_vals)/manual_vals))/length(manual_vals)) %>% round(2)
+```
+
+# Insulin signaling and FIJI wings comparisons
+
+## Load datasets
+
+```{r load_FIJI_data}
+FIJI_area_df = read.csv("MAPPER_FIJI_Area.csv", header=T, sep=",") %>% tibble()
+FIJI_trichome_df = read.csv("MAPPER_FIJI_Trichome.csv", header=T, sep=",") %>% tibble()
+```
+
+```{r view_FIJI_area}
+FIJI_area_df
+```
+
+```{r view_FIJI_trichome}
+FIJI_trichome_df
+```
+
+## Statistical comparisons for area
+
+Create separate groups for RyR-RNAi, InsR-CA, and InsR-DN.
+
+```{r separate_FIJI_area}
+Ryr_group = FIJI_area_df %>% dplyr::filter(Genotype==1)
+InsRCA_group = FIJI_area_df %>% dplyr::filter(Genotype==2)
+InsRDN_group = FIJI_area_df %>% dplyr::filter(Genotype==3)
+```
+
+### Compare MAPPER to FIJI for RyR-RNAi with unpaired T-Test and F-test
+
+There are no statistical differences in wing area for RyR-RNAi comparing MAPPER to FIJI.
+
+```{r FIJI_area_test_RyR}
+canUseUnpairedTTest(Ryr_group$MAPPER.area, Ryr_group$FIJI.area)
+```
+
+```{r FIJI_area_test_RyR_F}
+var.test(Ryr_group$MAPPER.area, Ryr_group$FIJI.area)
+```
+
+### Compare MAPPER to FIJI for InsR-CA with unpaired T-Test and F-test
+
+There are no statistical differences in wing area for InsR-CA comparing MAPPER to FIJI.
+
+```{r FIJI_area_test_CA}
+canUseUnpairedTTest(InsRCA_group$MAPPER.area, InsRCA_group$FIJI.area)
+```
+
+```{r FIJI_area_test_CA_F}
+var.test(InsRCA_group$MAPPER.area, InsRCA_group$FIJI.area)
+```
+
+### Compare MAPPER to FIJI for InsR-CA with unpaired T-Test and F-test
+
+There are no statistical differences in wing area for InsR-DN comparing MAPPER to FIJI.
+
+```{r FIJI_area_test_DN}
+canUseUnpairedTTest(InsRDN_group$MAPPER.area, InsRDN_group$FIJI.area)
+```
+
+```{r FIJI_area_test_DN_F}
+var.test(InsRDN_group$MAPPER.area, InsRDN_group$FIJI.area)
+```
+
+### Generate violin plots
+
+#### RyR-RNAi area violin plot
+
+Plotted is the distribution of the total wing area for MAPPER compared to FIJI. Blue line indicates the mean with the red lines being the 95% CI of the mean.
+
+```{r FIJI_RyR_Violin}
+#svg("MAPPERValidationPlots/FIJI_RyR_Violin.svg", family = "arial", width=3, height=2)
+
+ggplot(melt(Ryr_group) %>% dplyr::filter(variable=="MAPPER.area" | variable == "FIJI.area"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  #stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.y=element_blank()) +
+  labs(x=expression(paste(""))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+#### InsR-CA area violin plot 
+
+Plotted is the distribution of the total wing area for MAPPER compared to FIJI. Blue line indicates the mean with the red lines being the 95% CI of the mean.
+
+```{r FIJI_InsRCA_Violin}
+#svg("MAPPERValidationPlots/FIJI_InsRCA_Violin.svg", family = "arial", width=3, height=2)
+
+ggplot(melt(InsRCA_group) %>% dplyr::filter(variable=="MAPPER.area" | variable == "FIJI.area"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  #stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.y=element_blank()) +
+  labs(x=expression(paste(""))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+#### InsR-DN area violin plot 
+
+Plotted is the distribution of the total wing area for MAPPER compared to FIJI. Blue line indicates the mean with the red lines being the 95% CI of the mean.
+
+```{r FIJI_InsRDN_violin}
+#svg("MAPPERValidationPlots/FIJI_InsRDN_violin.svg", family = "arial", width=3, height=2)
+
+ggplot(melt(InsRDN_group) %>% dplyr::filter(variable=="MAPPER.area" | variable == "FIJI.area"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  #stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.y=element_blank()) +
+  labs(x=expression(paste(""))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+## Statistical comparisons for trichome count
+
+Create separate groups for RyR-RNAi, InsR-CA, and InsR-DN.
+
+```{r separate_FIJI_trichome}
+Ryr_group_trichome = FIJI_trichome_df %>% dplyr::filter(Genotype==1)
+InsRCA_group_trichome = FIJI_trichome_df %>% dplyr::filter(Genotype==2)
+InsRDN_group_trichome = FIJI_trichome_df %>% dplyr::filter(Genotype==3)
+```
+
+### Compare MAPPER to FIJI for RyR-RNAi with Mann-Whitney U Test
+
+FIJIWings significantly overestimates trichome counts compared to MAPPER for RyR-RNAi.
+
+```{r U_Test_RyR_Trichome}
+wilcox.test(Ryr_group_trichome$MAPPER.Trichome, Ryr_group_trichome$FIJI.Trichome,
+                      correct = FALSE,
+                      alternative = "two.sided", paired = FALSE, exact=TRUE, conf.level = 1-alpha)
+```
+
+### Compare MAPPER to FIJI for InsR-CA with Mann-Whitney U Test
+
+FIJIWings significantly overestimates trichome counts compared to MAPPER for InsR-CA.
+
+```{r U_Test_CA_Trichome}
+wilcox.test(InsRCA_group_trichome$MAPPER.Trichome, InsRCA_group_trichome$FIJI.Trichome,
+                      correct = FALSE,
+                      alternative = "two.sided", paired = FALSE, exact=TRUE, conf.level = 1-alpha)
+```
+
+### Compare MAPPER to FIJI for InsR-DN with Mann-Whitney U Test
+
+FIJIWings significantly overestimates trichome counts compared to MAPPER for InsR-DN.
+
+```{r U_Test_DN_Trichome}
+wilcox.test(InsRDN_group_trichome$MAPPER.Trichome, InsRDN_group_trichome$FIJI.Trichome,
+                      correct = FALSE,
+                      alternative = "two.sided", paired = FALSE, exact=TRUE, conf.level = 1-alpha)
+```
+
+### Generate violin plots
+
+#### RyR-RNAi trichome violin plot
+
+Plotted is the distribution of the total trichome counts for MAPPER compared to FIJIWings. Blue line indicates the median with the red lines being the 95% CI of the median.
+
+```{r FIJI_RyR_Violin_Trichome}
+#svg("MAPPERValidationPlots/RyR_Trichome_FIJI.svg", family = "arial", width=3, height=2)
+ggplot(melt(Ryr_group_trichome) %>% dplyr::filter(variable=="MAPPER.Trichome" | variable == "FIJI.Trichome"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  #stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.x=element_blank()) +
+  labs(x=expression(paste("")), y=expression(paste("75 x 75 pixel area trichome count"))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+#### InsR-CA trichome violin plot
+
+Plotted is the distribution of the total trichome counts for MAPPER compared to FIJIWings. Blue line indicates the median with the red lines being the 95% CI of the median.
+
+```{r FIJI_CA_Violin_Trichome}
+#svg("MAPPERValidationPlots/InsRCA_Trichome_FIJI.svg", family = "arial", width=3, height=2)
+ggplot(melt(InsRCA_group_trichome) %>% dplyr::filter(variable=="MAPPER.Trichome" | variable == "FIJI.Trichome"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  #stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.x=element_blank()) +
+  labs(x=expression(paste("")), y=expression(paste("75 x 75 pixel area trichome count"))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+#### InsR-DN trichome violin plot
+
+Plotted is the distribution of the total trichome counts for MAPPER compared to FIJIWings. Blue line indicates the median.
+
+**NOTE:** The sample sizes are too small to create confidence intervals of the median for each group.
+
+```{r FIJI_DN_Violin_Trichome}
+#svg("MAPPERValidationPlots/InsRDN_Trichome_FIJI.svg", family = "arial", width=3, height=2)
+ggplot(melt(InsRDN_group_trichome) %>% dplyr::filter(variable=="MAPPER.Trichome" | variable == "FIJI.Trichome"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  #stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.x=element_blank()) +
+  labs(x=expression(paste("")), y=expression(paste("75 x 75 pixel area trichome count"))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```
+
+Instead of plotting the medians, the mean is plotted. Comparisons should be taken with much consideration as the sample sizes are small and the distributions are for discrete count data.
+
+```{r FIJI_DN_Violin_Trichome_mean}
+#svg("MAPPERValidationPlots/InsRDN_Trichome_FIJI_Mean.svg", family = "arial", width=3, height=2)
+ggplot(melt(InsRDN_group_trichome) %>% dplyr::filter(variable=="MAPPER.Trichome" | variable == "FIJI.Trichome"),
+       aes(x=factor(variable),
+           y=value)) +
+  geom_violin(scale="width", alpha=0.50, fill="lightslateblue") +
+  geom_jitter(width=0.25) +
+  #stat_summary(fun="median", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  #stat_summary(fun="cimed", geom="crossbar", size=0.5, fill="red", color = "red") +
+  stat_summary(fun="mean", geom="crossbar", size=0.5, fill="blue", color = "blue") +
+  stat_summary(fun="cimean", geom="crossbar", size=0.5, fill="red", color = "red") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 0.6),
+        axis.title.x=element_blank()) +
+  labs(x=expression(paste("")), y=expression(paste("75 x 75 pixel area trichome count"))) +
+  theme(panel.grid.major = element_blank(), panel.grid.minor = element_blank(),
+panel.background = element_blank(), axis.line = element_line(colour = "black"))
+```

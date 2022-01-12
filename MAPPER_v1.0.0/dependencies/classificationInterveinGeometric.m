@@ -3,7 +3,8 @@
 function [labelledIntervein, yfit] = ClassificationInterveinGeometric(bw_label)
 
     %% load the trained machine learning model for intervein cassification
-    load('trainedModelGeometricFeaturesv1.mat');
+    % load('trainedModelGeometricFeaturesv1.mat');
+    load('trainedModel.mat');
 
     %% Extract EFD features fro each intervein component of the Drosophila wing
     x = bw_label;
@@ -22,7 +23,9 @@ function [labelledIntervein, yfit] = ClassificationInterveinGeometric(bw_label)
     geometricFeaturesIntervein(:,3) = featureRatio;
    
     %% Predict class of each inervein region 
-    yfit = trainedModelGeometricFeaturesv1.predictFcn(geometricFeaturesIntervein);
+    %yfit = trainedModelGeometricFeaturesv1.predictFcn(geometricFeaturesIntervein);
+    yfit = trainedModel.predictFcn(geometricFeaturesIntervein);
+
 
     %% Obtain a labelled segmentation mask for output (to be printe dfor each wing)
     labelledIntervein = bw_label;

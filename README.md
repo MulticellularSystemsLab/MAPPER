@@ -1,6 +1,6 @@
 ![](MAPPER_Abstract_Image.png)
 
-Here is a repository for the manuscript titled MAPPER: A new image analysis pipeline unmasks differential regulation of *Drosophila* wing features developed and written by Nilay Kumar in the Zartman lab at the University of Notre Dame. You can find the pre-print of the paper on bioRxiv [here](https://www.biorxiv.org/content/10.1101/2020.12.16.422888v1.full). The bulk of the code was built by [Nilay Kumar](https://scholar.google.com/citations?user=XZjD7PYAAAAJ&hl=en) and co-developed by [Francisco Huizar](https://www.linkedin.com/in/francisco-huizar-82bb1a127/), [Dr. Ramezan Paravi Torghabeh](https://www.linkedin.com/in/ramezan-paravi-torghabeh-phd-b432baa0/), and [Dr. Pavel Brodskiy](https://www.linkedin.com/in/pavelbrodskiy). Experimental work and validation was carried out by Nilay Kumar, [Dr. Maria Unger](https://www.linkedin.com/in/maria-unger-10523158), [Trent Robinett](https://www.linkedin.com/in/trent-robinett-5a8979161), [Keity J. Farfan-Pira](https://mx.linkedin.com/in/keity-j-farf%C3%A1n-pira-3a5a06209), and [Dharsan Soundarrajan](https://scholar.google.com/citations?user=AWv4OiIAAAAJ&hl=en). This work was done within the [Multicellular Systems Engineering Lab](http://sites.nd.edu/zartmanlab/) at the University of Notre Dame and the [Laboratory of Growth Biology and Morphogenesis](https://www.fisio.cinvestav.mx/academicos/nahmad/index.html) at the Center for Research and Advanced Studies of the National Polytechnical Institute (Cinvestav). Please direct any questions to the principal investigator, [Dr. Jeremiah Zartman](http://sites.nd.edu/zartmanlab/contacts/). 
+Here is a repository for the manuscript titled MAPPER: An open-source, high-dimensional image analysis pipeline unmasks differential regulation of *Drosophila* wing features developed and written by Nilay Kumar in the Zartman lab at the University of Notre Dame. You can find the pre-print of the paper on bioRxiv [here](https://www.biorxiv.org/content/10.1101/2020.12.16.422888v1.full). The bulk of the code was built by [Nilay Kumar](https://scholar.google.com/citations?user=XZjD7PYAAAAJ&hl=en) and co-developed by [Francisco Huizar](https://www.linkedin.com/in/francisco-huizar-82bb1a127/), [Dr. Ramezan Paravi Torghabeh](https://www.linkedin.com/in/ramezan-paravi-torghabeh-phd-b432baa0/), and [Dr. Pavel Brodskiy](https://www.linkedin.com/in/pavelbrodskiy). Experimental work and validation was carried out by Nilay Kumar, [Dr. Maria Unger](https://www.linkedin.com/in/maria-unger-10523158), [Trent Robinett](https://www.linkedin.com/in/trent-robinett-5a8979161), [Keity J. Farfan-Pira](https://mx.linkedin.com/in/keity-j-farf%C3%A1n-pira-3a5a06209), and [Dharsan Soundarrajan](https://scholar.google.com/citations?user=AWv4OiIAAAAJ&hl=en). This work was done within the [Multicellular Systems Engineering Lab](http://sites.nd.edu/zartmanlab/) at the University of Notre Dame and the [Laboratory of Growth Biology and Morphogenesis](https://www.fisio.cinvestav.mx/academicos/nahmad/index.html) at the Center for Research and Advanced Studies of the National Polytechnical Institute (Cinvestav). Please direct any questions to the principal investigator, [Dr. Jeremiah Zartman](http://sites.nd.edu/zartmanlab/contacts/). 
 
 All code for the MAPPER application was done using [MATLAB](https://www.mathworks.com/products/matlab.html).  
 
@@ -47,6 +47,20 @@ Below you will find pre-trained pixel classification modules in ILASTIK for seve
   - **Source:** Nilay Kumar, Zartman Lab, Univeristy of Notre Dame
   - Three channels (RGB)
 ![](Classifier_6.png)
+
+# [U-Net](https://lmb.informatik.uni-freiburg.de/people/ronneber/u-net/) deep learning trained model
+- Supplementary File 1 sections S1 and S2 of the manuscript references a U-Net trained model that is linked here
+- The full folder containing the code is found on the repository here
+
+# Supplementary File 2 R Notebook
+- Figures 3 and 6 of the main text reference a supplementary file for statistical calculations
+- The supplementary file is in the form of an [R Notebook](https://rmarkdown.rstudio.com/lesson-10.html) and can be found [here](https://fjhuizar.github.io/MAPPER/RNotebook/)
+- Plots generated from the notebook were exported as SVG files and modified in [Inkscape](https://inkscape.org/) vector graphics software for final versions of the manuscript plots
+
+# Raw Data Sheets
+- Data for Figures 3, 6, S7, and S8 can be found [here](https://github.com/fjhuizar/MAPPER/tree/main/RNotebook). Explicit operations on the data sheets are found within [Supplementary File 2](https://fjhuizar.github.io/MAPPER/RNotebook/)
+- Data for Figures 4, 5, S9, and S10 can be found [here](https://github.com/fjhuizar/MAPPER/blob/main/Raw%20Data%20Sheets/samarkData.csv) for wing features and [here](https://github.com/fjhuizar/MAPPER/blob/main/Raw%20Data%20Sheets/samarkEFD.csv) for EFD coefficients
+- Data for Figures 7, S11, and S12 can be found [here](https://github.com/fjhuizar/MAPPER/raw/main/Raw%20Data%20Sheets/MAPPER_SPECIES_DATA.xlsx)
 
 
 # Acknowledgements
