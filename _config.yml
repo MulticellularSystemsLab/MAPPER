@@ -1,5 +1,5 @@
 title: Multicellular Systems and Engineering Lab
-description: "This is a code repository for the manuscript titled: MAPPER: A new image analysis pipeline unmasks differential regulation of Drosophila wing features."
+description: "This is a code repository for the manuscript titled: MAPPER: An open-source, high-dimensional image analysis pipeline unmasks differential regulation of Drosophila wing features."
 show_downloads: false
 google_analytics:
 theme: jekyll-theme-cayman

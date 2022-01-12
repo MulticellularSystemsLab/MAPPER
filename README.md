@@ -55,7 +55,7 @@ Below you will find pre-trained pixel classification modules in ILASTIK for seve
 	- The python code for training the U-net in an iPython notebook labeled "Deep learning-Unet-CrossEntropy-Four_classes"
 	- The python code for using the U-net in an iPython notebook labeled "Model Usage"
 	- A presentation on utiizing U-Net for *Drosophila* wing segmentation in a Microsoft Powerpoint labeled "wingSegmentation"	
-- For training the intervein classifier, MATLAB's image labeler app was used and the training resources can be found [here](https://github.com/MulticellularSystemsLab/MAPPER/tree/main/Supplmentary S2 Training Resources)
+- For training the intervein classifier, MATLAB's image labeler app was used and the training resources can be found [here](https://github.com/MulticellularSystemsLab/MAPPER/tree/main/Supplmentary_S2_Training_Resources)
 	- More information for this is explained in section S2 of Supplementary File 1
 
 # Supplementary File 2 R Notebook
@@ -72,4 +72,4 @@ Below you will find pre-trained pixel classification modules in ILASTIK for seve
 # Acknowledgements
 We would like to thank the South Bend Medical Foundation for generous access to their Apero Slide Scanner. We would like to thank [Dr. Ramezan Paravi Torghabeh](https://www.linkedin.com/in/ramezan-paravi-torghabeh-phd-b432baa0/), [Vijay Kumar Naidu Velagala](https://in.linkedin.com/in/vijay-kumar-naidu-velagala-34462429), [Dr. Megan Levis](https://scholar.google.com/citations?user=SY2-XTgAAAAJ&hl=en), and [Dr. Qinfeng Wu](https://www.linkedin.com/in/qinfengwu) for technical assistance and scientific discussions related to the project. The work in this manuscript was supported in part by NIH Grant R35GM124935, NSF award CBET-1553826, NSF-Simons Pilot award through Northwestern University, the Notre Dame International Mexico Faculty Grant Program, and grant CB-014-01-236685 from the Concejo Nacional de Ciencia y Tecnología of Mexico.
 
-# Repository last updated: January 12, 2022 04:00PM EST
+# Repository last updated: January 12, 2022 04:30PM EST
