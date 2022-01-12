@@ -60,11 +60,11 @@ Below you will find pre-trained pixel classification modules in ILASTIK for seve
 
 # Supplementary File 2 R Notebook
 - Figures 3 and 6 of the main text reference a supplementary file for statistical calculations
-- The supplementary file is in the form of an [R Notebook](https://rmarkdown.rstudio.com/lesson-10.html) and can be found [here](https://fjhuizar.github.io/MAPPER/RNotebook/)
+- The supplementary file is in the form of an [R Notebook](https://rmarkdown.rstudio.com/lesson-10.html) and can be found [here](https://multicellularsystemslab.github.io/MAPPER/RNotebook/)
 - Plots generated from the notebook were exported as SVG files and modified in [Inkscape](https://inkscape.org/) vector graphics software for final versions of the manuscript plots
 
 # Raw Data Sheets
-- Data for Figures 3, 6, S7, and S8 can be found [here](https://github.com/MulticellularSystemsLab/MAPPER/tree/main/RNotebook). Explicit operations on the data sheets are found within [Supplementary File 2](https://fjhuizar.github.io/MAPPER/RNotebook/)
+- Data for Figures 3, 6, S7, and S8 can be found [here](https://github.com/MulticellularSystemsLab/MAPPER/tree/main/RNotebook). Explicit operations on the data sheets are found within [Supplementary File 2](https://multicellularsystemslab.github.io/MAPPER/RNotebook/)
 - Data for Figures 4, 5, S9, and S10 can be found [here](https://github.com/MulticellularSystemsLab/MAPPER/blob/main/Raw%20Data%20Sheets/samarkData.csv) for wing features and [here](https://github.com/MulticellularSystemsLab/MAPPER/blob/main/Raw%20Data%20Sheets/samarkEFD.csv) for EFD coefficients
 - Data for Figures 7, S11, and S12 can be found [here](https://github.com/MulticellularSystemsLab/MAPPER/raw/main/Raw%20Data%20Sheets/MAPPER_SPECIES_DATA.xlsx)
 
