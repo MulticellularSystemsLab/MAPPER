@@ -54,7 +54,7 @@ Below you will find pre-trained pixel classification modules in ILASTIK for seve
 	- Image training data in the "imagedata" subfolder
 	- The python code for training the U-net in an iPython notebook labeled "Deep learning-Unet-CrossEntropy-Four_classes"
 	- The python code for using the U-net in an iPython notebook labeled "Model Usage"
-	- A presentation on utiizing U-Net for *Drosophila* wing segmentation in a Microsoft Powerpoint labeled "wingSegmentation"	
+	- A presentation on utilizing U-Net for *Drosophila* wing segmentation in a Microsoft Powerpoint labeled "wingSegmentation"	
 - For training the intervein classifier, MATLAB's image labeler app was used and the training resources can be found [here](https://github.com/MulticellularSystemsLab/MAPPER/tree/main/Supplmentary_S2_Training_Resources)
 	- More information for this is explained in section S2 of Supplementary File 1
 
