@@ -7,6 +7,11 @@ All code for the MAPPER application was done using [MATLAB](https://www.mathwork
 # Open-source license agreement
 - This code is made publicly available for use under the [GNU Lesser General Public License, version 2.1](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.en.html)
 - You can find the license agreement for MAPPER [here](https://github.com/MulticellularSystemsLab/MAPPER/blob/main/LICENSE)
+- We kindly ask users of the code and any derivative work to cite the original publication:
+
+```
+TO BE ADDED UPON PUBLICATION
+```
 
 The below licensing statements are verbatim statements from the Free and Open Source Software Auditing (FOSSA) team originating from [this](https://fossa.com/blog/open-source-software-licenses-101-lgpl-license/) webpage
 
