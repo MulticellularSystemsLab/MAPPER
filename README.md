@@ -5,9 +5,10 @@ Here is a repository for the manuscript titled MAPPER: An open-source, high-dime
 All code for the MAPPER application was done using [MATLAB](https://www.mathworks.com/products/matlab.html).  
 
 # Open-source license agreement
-- This code is made publicly available for use under the [GNU Lesser General Public License, version 2.1](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.en.html).
+- This code is made publicly available for use under the [GNU Lesser General Public License, version 2.1](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.en.html)
+- You can find the license agreement for MAPPER [here](https://github.com/MulticellularSystemsLab/MAPPER/blob/main/LICENSE)
 
-The below licensing statements are verbatim statements from the Free and Open Source Software Auditing (FOSSA) team originating from [this](https://fossa.com/blog/open-source-software-licenses-101-lgpl-license/) webpage.
+The below licensing statements are verbatim statements from the Free and Open Source Software Auditing (FOSSA) team originating from [this](https://fossa.com/blog/open-source-software-licenses-101-lgpl-license/) webpage
 
 Users of this code must:
 - Include a copy of the full license text and the original copyright notice
