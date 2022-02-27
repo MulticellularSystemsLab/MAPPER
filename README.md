@@ -4,6 +4,21 @@ Here is a repository for the manuscript titled MAPPER: An open-source, high-dime
 
 All code for the MAPPER application was done using [MATLAB](https://www.mathworks.com/products/matlab.html).  
 
+# Open-source license agreement
+- This code is made publicly available for use under the [GNU Lesser General Public License, version 2.1](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.en.html).
+
+The below licensing statements are verbatim statements from the Free and Open Source Software Auditing (FOSSA) team originating from [this](https://fossa.com/blog/open-source-software-licenses-101-lgpl-license/) webpage.
+
+Users of this code must:
+- Include a copy of the full license text and the original copyright notice
+- Make available the source code when you distribute a derivative work based on the licensed library
+- License any derivative works of the library under the same or later version of the LGPL or GPL
+
+The LGPL license allows users of the licensed code to:
+- Use the code commercially: Like GPL, LGPL imposes no conditions on using the code in software that’s sold commercially
+- Change the code: Users can rework the code, but if they distribute these modifications, they must release these updates in source code form
+- Place warranty: Distributors of the original code can offer their own warranty on the licensed software
+
 # Instructions to run the application
 - You can download all of the associated code [here](https://downgit.github.io/#/home?url=https://github.com/MulticellularSystemsLab/MAPPER/tree/main/MAPPER_v1.0.0)
 - Once you have downloaded the .ZIP folder, extract the folder to an easily accessible location
@@ -72,4 +87,4 @@ Below you will find pre-trained pixel classification modules in ILASTIK for seve
 # Acknowledgements
 We would like to thank the South Bend Medical Foundation for generous access to their Apero Slide Scanner. We would like to thank [Dr. Ramezan Paravi Torghabeh](https://www.linkedin.com/in/ramezan-paravi-torghabeh-phd-b432baa0/), [Vijay Kumar Naidu Velagala](https://in.linkedin.com/in/vijay-kumar-naidu-velagala-34462429), [Dr. Megan Levis](https://scholar.google.com/citations?user=SY2-XTgAAAAJ&hl=en), and [Dr. Qinfeng Wu](https://www.linkedin.com/in/qinfengwu) for technical assistance and scientific discussions related to the project. The work in this manuscript was supported in part by NIH Grant R35GM124935, NSF award CBET-1553826, NSF-Simons Pilot award through Northwestern University, the Notre Dame International Mexico Faculty Grant Program, and grant CB-014-01-236685 from the Concejo Nacional de Ciencia y Tecnología of Mexico.
 
-# Repository last updated: January 12, 2022 04:30PM EST
+# Repository last updated: February 27, 2022 06:30PM EST
