@@ -7,10 +7,10 @@ All code for the MAPPER application was done using [MATLAB](https://www.mathwork
 # Open-source license agreement
 - This code is made publicly available for use under the [GNU Lesser General Public License, version 2.1](https://www.gnu.org/licenses/old-licenses/lgpl-2.1.en.html)
 - You can find the license agreement for MAPPER [here](https://github.com/MulticellularSystemsLab/MAPPER/blob/main/LICENSE)
-- We kindly ask users of the code and any derivative work to cite the original publication:
+- We kindly ask users of the code and any derivative work to cite the [original publication](https://www.frontiersin.org/articles/10.3389/fgene.2022.869719/abstract):
 
 ```
-†Kumar, N., †Huizar, F.J., Farfán-Pira K.J., Brodskiy, P., Soundarrajan, D.S., Nahmad, M., Zartman, J.J.; MAPPER: An open-source, high-dimensional image analysis pipeline unmasks differential regulation of Drosophila wing features. Frontiers in Genetics (2022). https://www.frontiersin.org/articles/10.3389/fgene.2022.869719/abstract.
+†Kumar, N., †Huizar, F.J., Farfán-Pira K.J., Brodskiy, P., Soundarrajan, D.S., Nahmad, M., Zartman, J.J.; MAPPER: An open-source, high-dimensional image analysis pipeline unmasks differential regulation of Drosophila wing features. Frontiers in Genetics (2022). † These authors contributed equally.
 ```
 
 The below licensing statements are verbatim statements from the Free and Open Source Software Auditing (FOSSA) team originating from [this](https://fossa.com/blog/open-source-software-licenses-101-lgpl-license/) webpage
